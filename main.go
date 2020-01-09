@@ -7,6 +7,7 @@ import (
 	"github.com/travisperson/dydo-dns/dydosyncer"
 	"golang.org/x/oauth2"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"time"
 )
@@ -22,11 +23,15 @@ func (t *TokenSource) Token() (*oauth2.Token, error) {
 	return token, nil
 }
 
-func getIpAddr() string {
+func getIpAddr() (string, error) {
 	res, _ := http.Get("https://api.ipify.org")
 	ipRaw, _ := ioutil.ReadAll(res.Body)
 
-	return string(ipRaw)
+	if net.ParseIP(string(ipRaw)) == nil {
+		return "", fmt.Errorf("Failed to parse IP response")
+	}
+
+	return string(ipRaw), nil
 }
 
 func main() {
@@ -50,7 +55,13 @@ func main() {
 	dydo := dydosyncer.NewDydoSyncer(*domain, *rtype, *rname, client, frequency_duration)
 
 	for {
-		ip := getIpAddr()
+		ip, err := getIpAddr()
+		if err != nil {
+			fmt.Printf("[%s] Failed to retrieve IP\n", *domain)
+			time.Sleep(frequency_duration)
+			continue
+		}
+
 		fmt.Printf("[%s] External IP [%s]\n", *domain, ip)
 
 		changed, last, err := dydo.Sync(ip)
